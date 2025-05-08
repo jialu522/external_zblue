@@ -179,6 +179,15 @@ static int a2dp_process_config_ind(struct bt_avdtp *session, struct bt_avdtp_sep
 		return -EINVAL;
 	}
 
+	if (ep->codec_type != codec_type) {
+		if (codec_type > BT_A2DP_VENDOR)
+			*errcode = BT_A2DP_INVALID_CODEC_TYPE;
+		else
+			*errcode = BT_A2DP_NOT_SUPPORTED_CODEC_TYPE;
+
+		return -EINVAL;
+	}
+
 	if (codec_type == BT_A2DP_SBC) {
 		struct bt_a2dp_codec_sbc_params *sbc_set;
 		struct bt_a2dp_codec_sbc_params *sbc;
