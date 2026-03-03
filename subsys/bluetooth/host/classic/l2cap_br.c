@@ -66,6 +66,7 @@ enum {
 	L2CAP_FLAG_CONN_RCONF_DONE,	/* remote config accepted by local */
 	L2CAP_FLAG_CONN_ACCEPTOR,	/* getting incoming connection req */
 	L2CAP_FLAG_CONN_PENDING,	/* remote sent pending result in rsp */
+	L2CAP_FLAG_CONN_REQ_PENDING,	/* pending local connection request */
 
 	/* Signaling channel flags */
 	L2CAP_FLAG_SIG_INFO_PENDING,	/* retrieving remote l2cap info */
@@ -1750,7 +1751,7 @@ int bt_l2cap_br_chan_connect(struct bt_conn *conn, struct bt_l2cap_chan *chan,
 
 	br_chan->psm = psm;
 	bt_l2cap_br_chan_set_state(chan, BT_L2CAP_CONNECTING);
-	atomic_set_bit(BR_CHAN(chan)->flags, L2CAP_FLAG_CONN_PENDING);
+	atomic_set_bit(BR_CHAN(chan)->flags, L2CAP_FLAG_CONN_REQ_PENDING);
 
 	switch (l2cap_br_conn_security(chan, psm)) {
 	case L2CAP_CONN_SECURITY_PENDING:
@@ -1777,6 +1778,7 @@ int bt_l2cap_br_chan_connect(struct bt_conn *conn, struct bt_l2cap_chan *chan,
 	req = net_buf_add(buf, sizeof(*req));
 	req->psm = sys_cpu_to_le16(psm);
 	req->scid = sys_cpu_to_le16(BR_CHAN(chan)->rx.cid);
+	atomic_clear_bit(BR_CHAN(chan)->flags, L2CAP_FLAG_CONN_REQ_PENDING);
 
 	l2cap_br_chan_send_req(BR_CHAN(chan), buf, L2CAP_BR_CONN_TIMEOUT);
 
@@ -1830,6 +1832,7 @@ static void l2cap_br_conn_rsp(struct bt_l2cap_br *l2cap, uint8_t ident,
 		atomic_clear_bit(BR_CHAN(chan)->flags, L2CAP_FLAG_CONN_PENDING);
 		break;
 	case BT_L2CAP_BR_PENDING:
+		atomic_set_bit(BR_CHAN(chan)->flags, L2CAP_FLAG_CONN_PENDING);
 		k_work_reschedule(&br_chan->rtx_work, L2CAP_BR_CONN_TIMEOUT);
 		break;
 	default:
@@ -1998,7 +2001,7 @@ static void l2cap_br_conn_pend(struct bt_l2cap_chan *chan, uint8_t status)
 
 		/* Release channel allocated to outgoing connection request */
 		if (atomic_test_bit(BR_CHAN(chan)->flags,
-				    L2CAP_FLAG_CONN_PENDING)) {
+				    L2CAP_FLAG_CONN_REQ_PENDING)) {
 			l2cap_br_chan_cleanup(chan);
 		}
 
@@ -2021,7 +2024,7 @@ static void l2cap_br_conn_pend(struct bt_l2cap_chan *chan, uint8_t status)
 		 */
 		l2cap_br_conf(chan);
 	} else if (atomic_test_and_clear_bit(BR_CHAN(chan)->flags,
-					     L2CAP_FLAG_CONN_PENDING)) {
+					     L2CAP_FLAG_CONN_REQ_PENDING)) {
 		buf = bt_l2cap_create_pdu(&br_sig_pool, 0);
 
 		hdr = net_buf_add(buf, sizeof(*hdr));
